@@ -1,0 +1,3 @@
+pipeline { //pipeline
+    agent {label "python-worker1-ec2" }
+
