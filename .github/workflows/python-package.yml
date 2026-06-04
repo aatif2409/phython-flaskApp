@@ -4,31 +4,31 @@
 name: Python package
 
 on:
-  push:
-    branches: [ "main" ]
+  # push:
+  #   branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
-jobs:
-  build:
+jobs: #collection of jobs
+  python-tests: #job1
 
-    runs-on: ubuntu-latest
+    #runs-on: ubuntu-latest #agent/worker github-hosted
+    runs-on: self-hosted #self-hosted-runner
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11"]
 
-    steps:
+    steps: #tasks inside a job
     - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
+    - name: Set up Python
+      run: |
+        python3 --version
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        sudo yum install python3-pip -y 
+        pip3 install flake8 pytest
+        if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -37,31 +37,76 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pytest
+        pytest --cov=app --cov-report=xml:coverage.xml
 
-  docker-image-build-and-push:
-    runs-on: ubuntu-latest
+    - name: upload the coverage file in artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml
+
+  sonarqube-analysis: #job2
+    name: Build and analyze
+    needs: python-tests #job2 depends on job1
+    #runs-on: ubuntu-latest 
+    runs-on: self-hosted #self-hosted-runner
+    
     steps:
-    -
-      name: Checkout
-      uses: actions/checkout@v4
-    -
-      name: Login to Docker Hub
-      uses: docker/login-action@v4
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    -
-      name: Set up QEMU
-      uses: docker/setup-qemu-action@v4
-    -
-      name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
-    -
-      name: Build and push
-      uses: docker/build-push-action@v7
-      with:
-        context: .
-        push: true
-        tags: aatif6609/pipelinecicd:latest      
-         
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: download coverage report from artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+
+      - name: test coverage xml file
+        run: |
+          ls -l
+          cat coverage.xml
+
+      - uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+      # If you wish to fail your job when the Quality Gate is red, uncomment the
+      # following lines. This would typically be used to fail a deployment.
+      - uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  docker-image-build-and-push: #job3
+    #runs-on: ubuntu-latest
+    runs-on: self-hosted #self-hosted-runner
+    needs: ['python-tests', 'sonarqube-analysis'] #job3 depends on job1 and job2
+    steps:
+      - 
+        name: "Install docker"
+        run: | 
+          sudo yum install docker -y
+          sudo systemctl start docker
+          sudo usermod -aG docker worker
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      -
+        name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          push: true
+          tags: aatif6609/pipelinecicd:latest
+    
