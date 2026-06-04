@@ -1,3 +1,39 @@
 pipeline { //pipeline
     agent {label "python-worker1-ec2" }
 
+    stages { //collection of jobs/stage
+        stage('Repo Clone') { //job1 == stage
+            steps { // all the tasks inside a job
+                git branch: 'main', url: 'https://github.com/aatif2409/phython-flaskApp.git'
+            }
+        }
+        stage("setup python and pip3") { //job2
+            steps { //all the task inside job 2
+                sh 'yum install python3 python3-pip -y'     
+            }
+        }
+        stage("Install dependencies"){ // job3
+            steps {
+                sh 'pip3 install -r requirements.txt'
+            }
+        }
+        stage("Unit testing & Lint check"){ // job4
+            steps {
+                sh 'pytest'
+                sh 'flake8 .'
+            }
+        }
+        stage("Build docker image"){ // job5
+            steps {
+                sh 'yum install docker -y'
+                sh 'systemctl start docker'
+                sh 'docker build -t gfgpython .'
+            }
+        }
+        stage("Deploy the app in dev env"){ // job6
+            steps {
+                sh 'docker run -dit --name webapp -p 80:80 gfgpython'
+            }
+        }
+    }
+}
