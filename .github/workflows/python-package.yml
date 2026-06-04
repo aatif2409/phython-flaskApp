@@ -13,7 +13,7 @@ jobs: #collection of jobs
   python-tests: #job1
 
     #runs-on: ubuntu-latest #agent/worker github-hosted
-    runs-on: ubuntu-latest #self-hosted-runner
+    runs-on: self-hosted #self-hosted-runner
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +49,7 @@ jobs: #collection of jobs
     name: Build and analyze
     needs: python-tests #job2 depends on job1
     #runs-on: ubuntu-latest 
-    runs-on: ubuntu-latest #self-hosted-runner
+    runs-on: self-hosted #self-hosted-runner
     
     steps:
       - uses: actions/checkout@v4
